@@ -363,7 +363,8 @@ async function recalculateFromTransaction(data, transactionDate) {
     }
     
     if (!earliestManualDate) {
-        // No manual transactions, nothing to recalculate
+        // No manual transactions left - just recalculate all auto deposits from scratch
+        await recalculateAllDeposits(data);
         return;
     }
     
@@ -746,6 +747,10 @@ app.delete('/api/transaction/:index', async (req, res) => {
         
         // Recalculate deposits from the transaction date forward
         await recalculateFromTransaction(data, transactionDate);
+        
+        // Ensure data is saved even if recalculateFromTransaction didn't save
+        // (happens when deleting the last manual transaction)
+        await saveAccountData(data);
         console.log('Recalculation completed successfully');
         res.json({ success: true });
     } catch (error) {
