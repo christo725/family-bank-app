@@ -604,9 +604,6 @@ async function calculateSavingsGoal() {
                     <div class="alert alert-warning">
                         <h5>${data.message}</h5>
                         <p class="mb-3">${data.message2}</p>
-                        <div class="alert alert-info mb-0">
-                            <small><strong>💡 Tip:</strong> Ask your parent to help you add ${formatCurrency(data.weekly_extra_needed)} each week!</small>
-                        </div>
                         <div class="mt-3">
                             <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
                                 <i class="fas fa-sync"></i> Try Again
