@@ -25,16 +25,15 @@ let memoryStorage = null;
 
 // Initialize Redis client
 let redis = null;
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-    redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
-    console.log('Redis client initialized successfully');
-} else {
-    console.log('Redis environment variables not found, using file storage');
+try {
+    // Use Redis.fromEnv() which automatically detects environment variables
+    redis = Redis.fromEnv();
+    console.log('Redis client initialized successfully with fromEnv()');
+} catch (error) {
+    console.log('Redis initialization failed, using file storage:', error.message);
     console.log('UPSTASH_REDIS_REST_URL present:', !!process.env.UPSTASH_REDIS_REST_URL);
     console.log('UPSTASH_REDIS_REST_TOKEN present:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
+    redis = null;
 }
 
 // Migration helper
