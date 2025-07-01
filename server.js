@@ -354,8 +354,15 @@ app.get('/api/account', (req, res) => {
             next_sunday: formatDate(nextSunday),
             days_until_saturday: daysUntilSaturday,
             days_until_sunday: daysUntilSunday,
-            is_saturday: today.getDay() === 6,
-            is_sunday: today.getDay() === 0
+            is_saturday: todayDay === 6,
+            is_sunday: todayDay === 0,
+            debug_info: {
+                today_date: today.toISOString(),
+                today_day: todayDay,
+                day_names: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][todayDay],
+                next_saturday_date: nextSaturday.toISOString(),
+                next_sunday_date: nextSunday.toISOString()
+            }
         });
     } catch (error) {
         console.error('Error getting account data:', error);
