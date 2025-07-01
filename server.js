@@ -329,15 +329,26 @@ async function processNewDeposits(data) {
                 balance += allowance;
                 data.last_processed_saturday = new Date(date);
             } else if (type === 'sunday') {
-                // Calculate interest on current balance
-                const interest = balance * (interestRate / 100);
+                // Calculate interest based on balance at this specific date
+                // Need to recalculate balance up to this point including manual transactions
+                const currentDate = new Date(date);
+                const allTxnsUpToNow = [...data.auto_deposits, ...data.manual_txns]
+                    .filter(txn => new Date(txn.Date) < currentDate)
+                    .sort((a, b) => new Date(a.Date) - new Date(b.Date));
+                
+                let balanceAtThisPoint = data.initial_balance;
+                for (const txn of allTxnsUpToNow) {
+                    balanceAtThisPoint += txn.Amount;
+                }
+                
+                const interest = balanceAtThisPoint * (interestRate / 100);
                 if (interest > 0) {
                     data.auto_deposits.push({
                         Date: new Date(date),
                         Type: `Interest @ ${interestRate}% 😊`,
                         Amount: interest
                     });
-                    balance += interest;
+                    balance += interest; // Update running balance for next iteration
                 }
                 data.last_processed_sunday = new Date(date);
             }
@@ -350,85 +361,42 @@ async function processNewDeposits(data) {
 }
 
 async function recalculateFromTransaction(data, transactionDate) {
-    // Manual transactions should only affect interest calculations going forward,
-    // not historical allowances or previous interest payments
-    
-    console.log('=== RECALCULATION DEBUG ===');
-    console.log('Manual transactions count:', data.manual_txns.length);
-    console.log('Manual transaction dates:', data.manual_txns.map(txn => `${txn.Type}: ${formatDate(new Date(txn.Date))}`));
+    // NEW APPROACH: Don't try to preserve/remove deposits.
+    // Instead, recalculate all interest from scratch but base it on the correct historical balance at each point.
     
     if (data.manual_txns.length === 0) {
-        // No manual transactions left - just ensure we have all current auto deposits
+        // No manual transactions - just do normal processing
         await processNewDeposits(data);
         await saveAccountData(data);
         return;
     }
     
-    // Find the earliest manual transaction date - this is key!
-    let earliestManualDate = null;
-    for (const txn of data.manual_txns) {
-        const txnDate = new Date(txn.Date);
-        if (!earliestManualDate || txnDate < earliestManualDate) {
-            earliestManualDate = txnDate;
-        }
-    }
+    // Step 1: Remove ALL interest payments (they depend on balance)
+    // Keep all allowances (they are fixed amounts regardless of balance)
+    const allowancesOnly = data.auto_deposits.filter(deposit => 
+        !deposit.Type.includes("Interest")
+    );
     
-    console.log('Earliest manual transaction date:', formatDate(earliestManualDate));
-    console.log('Current auto deposits count:', data.auto_deposits.length);
-    
-    // Remove only interest payments that come on or after the earliest manual transaction date
-    // Keep all allowances (they don't depend on balance)
-    const preservedDeposits = data.auto_deposits.filter(deposit => {
-        const depositDate = new Date(deposit.Date);
-        const isInterestPayment = deposit.Type.includes("Interest");
-        
-        if (!isInterestPayment) {
-            // Keep all allowances - they don't depend on balance
-            console.log(`KEEPING allowance: ${formatDate(depositDate)} - ${deposit.Type}`);
-            return true;
-        }
-        
-        // For interest payments, only keep those that come BEFORE the earliest manual transaction
-        const shouldKeep = depositDate < earliestManualDate;
-        console.log(`${shouldKeep ? 'KEEPING' : 'REMOVING'} interest: ${formatDate(depositDate)} - ${deposit.Type} (${shouldKeep ? 'before' : 'on/after'} earliest manual)`);
-        return shouldKeep;
-    });
-    
-    console.log('Preserved deposits count:', preservedDeposits.length);
-    
-    // Find the last processed dates from ALL original deposits (not just preserved)
+    // Step 2: Find the last allowance date to determine last_processed_saturday
     let lastSaturday = null;
-    let lastSunday = null;
-    
-    for (const deposit of data.auto_deposits) {
+    for (const deposit of allowancesOnly) {
         const depositDate = new Date(deposit.Date);
-        const dayOfWeek = depositDate.getDay();
-        
-        if (dayOfWeek === 6 && deposit.Type === "Weekly Allowance") { // Saturday
+        if (depositDate.getDay() === 6 && deposit.Type === "Weekly Allowance") {
             if (!lastSaturday || depositDate > lastSaturday) {
                 lastSaturday = depositDate;
             }
-        } else if (dayOfWeek === 0 && deposit.Type.includes("Interest")) { // Sunday
-            // Only count preserved interest payments for last processed Sunday
-            if (preservedDeposits.includes(deposit)) {
-                if (!lastSunday || depositDate > lastSunday) {
-                    lastSunday = depositDate;
-                }
-            }
         }
     }
     
-    console.log('Last processed Saturday:', lastSaturday ? formatDate(lastSaturday) : 'none');
-    console.log('Last processed Sunday (preserved):', lastSunday ? formatDate(lastSunday) : 'none');
+    // Step 3: Reset data to allowances only
+    data.auto_deposits = allowancesOnly;
+    data.last_processed_saturday = lastSaturday;
+    data.last_processed_sunday = null; // Recalculate all interest from beginning
     
-    // Update data with preserved deposits and recalculate from there
-    data.auto_deposits = preservedDeposits;
-    data.last_processed_sunday = lastSunday; // Reset Sunday processing to recalculate interest
-    
-    // Process new deposits (this will add missing allowances and recalculate interest)
+    // Step 4: Process deposits normally - this will add missing allowances and calculate interest correctly
+    // The processNewDeposits function will calculate interest based on the running balance at each point,
+    // which includes manual transactions in chronological order
     await processNewDeposits(data);
-    
-    console.log('=== END RECALCULATION DEBUG ===');
     
     // Ensure data is saved after recalculation
     await saveAccountData(data);
@@ -713,9 +681,6 @@ app.post('/api/settings/current', async (req, res) => {
 
 // Add manual transaction
 app.post('/api/transaction', async (req, res) => {
-    console.log('=== MANUAL TRANSACTION ADD ===');
-    console.log('Request body:', req.body);
-    
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
@@ -731,26 +696,14 @@ app.post('/api/transaction', async (req, res) => {
         const transactionAmount = type === 'Deposit' ? parseFloat(amount) : -parseFloat(amount);
         const transactionDate = date ? parseDate(date) : new Date();
         
-        console.log('Adding manual transaction:', {
-            type: name,
-            amount: transactionAmount,
-            date: formatDate(transactionDate)
-        });
-        console.log('Manual transactions before add:', data.manual_txns.length);
-        
         data.manual_txns.push({
             Date: transactionDate,
             Type: name,
             Amount: transactionAmount
         });
         
-        console.log('Manual transactions after add:', data.manual_txns.length);
-        console.log('About to call recalculateFromTransaction...');
-        
         // Recalculate deposits from the transaction date forward
         await recalculateFromTransaction(data, transactionDate);
-        
-        console.log('Recalculation completed, sending success response');
         res.json({ success: true });
     } catch (error) {
         console.error('Error adding transaction:', error);
