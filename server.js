@@ -242,7 +242,7 @@ function processNewDeposits(data) {
                 if (interest > 0) {
                     data.auto_deposits.push({
                         Date: new Date(date),
-                        Type: "Interest 😊",
+                        Type: `Interest @ ${interestRate}% 😊`,
                         Amount: interest
                     });
                     balance += interest;
@@ -275,6 +275,14 @@ function getCurrentTime() {
         second: '2-digit',
         hour12: true
     });
+}
+
+// Currency formatting helper
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+    }).format(amount);
 }
 
 // ========== API ROUTES ==========
@@ -511,7 +519,9 @@ app.post('/api/calculate-goal', (req, res) => {
             return res.json({
                 success: true,
                 already_reached: true,
-                message: "🎉 You've already reached your goal!"
+                current_balance: currentBalance,
+                goal_amount: goalAmount,
+                message: `🎉 Great news! You already have ${formatCurrency(currentBalance)}, which exceeds your goal of ${formatCurrency(goalAmount)}!`
             });
         }
         
@@ -524,7 +534,9 @@ app.post('/api/calculate-goal', (req, res) => {
         if (saturdays.length === 0 && sundays.length === 0) {
             return res.json({
                 success: false,
-                message: "Your goal date is before the next deposit."
+                current_balance: currentBalance,
+                goal_amount: goalAmount,
+                message: `Your goal date is before the next deposit. You currently have ${formatCurrency(currentBalance)} and need ${formatCurrency(goalAmount - currentBalance)} more to reach your goal.`
             });
         }
         
@@ -549,10 +561,14 @@ app.post('/api/calculate-goal', (req, res) => {
             res.json({
                 success: true,
                 will_reach: true,
+                current_balance: currentBalance,
+                goal_amount: goalAmount,
+                future_balance: futureBalance,
                 days_until_goal: daysUntilGoal,
                 allowance_payments: saturdays.length,
                 interest_payments: sundays.length,
-                message: "✅ You'll reach your goal with current allowance and interest!"
+                total_allowance: saturdays.length * data.current_allowance,
+                message: `✅ Good news! Starting with ${formatCurrency(currentBalance)}, you'll reach your goal of ${formatCurrency(goalAmount)} with your current ${formatCurrency(data.current_allowance)} weekly allowance and ${data.current_interest}% interest rate.`
             });
         } else {
             const shortfall = goalAmount - futureBalance;
@@ -561,12 +577,16 @@ app.post('/api/calculate-goal', (req, res) => {
             res.json({
                 success: true,
                 will_reach: false,
+                current_balance: currentBalance,
+                goal_amount: goalAmount,
+                future_balance: futureBalance,
                 shortfall: shortfall,
                 days_until_goal: daysUntilGoal,
                 allowance_payments: saturdays.length,
                 interest_payments: sundays.length,
                 weekly_extra_needed: weeklyExtra,
-                message: `📊 You need $${shortfall.toFixed(2)} more to reach your goal.`
+                total_allowance: saturdays.length * data.current_allowance,
+                message: `📊 Starting with ${formatCurrency(currentBalance)}, you'll have ${formatCurrency(futureBalance)} by your target date. To reach your goal of ${formatCurrency(goalAmount)}, you'll need to save an additional ${formatCurrency(weeklyExtra)} each week.`
             });
         }
     } catch (error) {

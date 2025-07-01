@@ -568,7 +568,8 @@ async function calculateSavingsGoal() {
             if (data.already_reached) {
                 resultHTML = `
                     <div class="alert alert-success">
-                        ${data.message}
+                        <h6 class="alert-heading">🎉 Goal Already Achieved!</h6>
+                        <p>${data.message}</p>
                         <div class="mt-3">
                             <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
                                 <i class="fas fa-sync"></i> Recalculate
@@ -582,11 +583,15 @@ async function calculateSavingsGoal() {
             } else if (data.will_reach) {
                 resultHTML = `
                     <div class="alert alert-success">
-                        <h6>${data.message}</h6>
+                        <h6 class="alert-heading">✅ You'll Reach Your Goal!</h6>
+                        <p>${data.message}</p>
+                        <hr>
+                        <p class="mb-2"><strong>Timeline Details:</strong></p>
                         <ul class="mb-3">
                             <li>Days until goal: ${data.days_until_goal}</li>
-                            <li>Allowance payments until goal: ${data.allowance_payments}</li>
-                            <li>Interest payments until goal: ${data.interest_payments}</li>
+                            <li>Weekly allowance payments: ${data.allowance_payments} × ${formatCurrency(accountData.current_allowance)} = ${formatCurrency(data.total_allowance)}</li>
+                            <li>Interest payments: ${data.interest_payments}</li>
+                            <li>Projected final balance: ${formatCurrency(data.future_balance)}</li>
                         </ul>
                         <div class="mt-3">
                             <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
@@ -601,16 +606,18 @@ async function calculateSavingsGoal() {
             } else {
                 resultHTML = `
                     <div class="alert alert-warning">
-                        <h6>${data.message}</h6>
+                        <h6 class="alert-heading">📊 Additional Savings Needed</h6>
+                        <p>${data.message}</p>
+                        <hr>
+                        <p class="mb-2"><strong>Savings Plan Details:</strong></p>
                         <ul class="mb-3">
-                            <li>Days until goal: ${data.days_until_goal}</li>
-                            <li>Allowance payments until goal: ${data.allowance_payments}</li>
-                            <li>Interest payments until goal: ${data.interest_payments}</li>
-                            ${data.weekly_extra_needed > 0 ? 
-                                `<li><strong>Additional weekly deposit needed: ${formatCurrency(data.weekly_extra_needed)}</strong></li>` : 
-                                ''
-                            }
+                            <li>Current balance: ${formatCurrency(data.current_balance)}</li>
+                            <li>Goal amount: ${formatCurrency(data.goal_amount)}</li>
+                            <li>Projected balance without extra savings: ${formatCurrency(data.future_balance)}</li>
+                            <li>Shortfall: ${formatCurrency(data.shortfall)}</li>
+                            <li><strong>Extra weekly savings needed: ${formatCurrency(data.weekly_extra_needed)}</strong></li>
                         </ul>
+                        <p class="mb-0"><em>Tip: You can add the extra ${formatCurrency(data.weekly_extra_needed)} as a weekly manual deposit in the parent settings.</em></p>
                         <div class="mt-3">
                             <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
                                 <i class="fas fa-sync"></i> Recalculate
