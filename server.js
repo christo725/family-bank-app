@@ -539,12 +539,24 @@ app.get('/api/account', async (req, res) => {
 
 // Update settings
 app.post('/api/settings/initial', async (req, res) => {
+    console.log('Initial settings update request received');
+    console.log('Session ID:', req.sessionID);
+    console.log('Session authenticated:', !!req.session.authenticated);
+    console.log('Request body:', req.body);
+    
     if (!req.session.authenticated) {
+        console.log('Authentication failed - rejecting initial settings request');
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
         const data = await loadAccountData();
+        console.log('Loaded data before changes:', {
+            account_holder: data.account_holder,
+            initial_allowance: data.initial_allowance,
+            initial_interest: data.initial_interest
+        });
+        
         const { account_holder, initial_balance, start_date, initial_allowance, initial_interest } = req.body;
         
         if (account_holder !== undefined && account_holder !== null && account_holder !== '') {
@@ -578,7 +590,23 @@ app.post('/api/settings/initial', async (req, res) => {
             data.current_interest = data.initial_interest;
         }
         
+        console.log('Data after changes:', {
+            account_holder: data.account_holder,
+            initial_allowance: data.initial_allowance,
+            initial_interest: data.initial_interest
+        });
+        
+        console.log('About to recalculate all deposits...');
         await recalculateAllDeposits(data);
+        
+        // Verify the data was saved by reloading
+        const verifyData = await loadAccountData();
+        console.log('Verification after save:', {
+            account_holder: verifyData.account_holder,
+            initial_allowance: verifyData.initial_allowance,
+            initial_interest: verifyData.initial_interest
+        });
+        
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating initial settings:', error);
