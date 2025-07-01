@@ -833,7 +833,51 @@ app.post('/api/calculate-goal', async (req, res) => {
             });
         } else {
             const shortfall = goalAmount - futureBalance;
-            const weeklyExtra = saturdays.length > 0 ? shortfall / saturdays.length : 0;
+            
+            // Calculate precise weekly extra needed using binary search
+            // This accounts for compound interest on the additional deposits
+            let weeklyExtra = 0;
+            
+            if (saturdays.length > 0) {
+                // Binary search to find the exact weekly extra amount needed
+                let low = 0;
+                let high = shortfall; // Upper bound - no interest case
+                const tolerance = 0.01; // Within 1 cent
+                
+                while (high - low > tolerance) {
+                    const mid = (low + high) / 2;
+                    
+                    // Simulate future balance with this weekly extra amount
+                    let testBalance = currentBalance;
+                    
+                    for (const { date, type } of allDates) {
+                        if (type === 'saturday') {
+                            testBalance += data.current_allowance + mid; // Add extra deposit
+                        } else {
+                            // Interest on Sunday - includes the extra deposits made so far
+                            testBalance *= (1 + data.current_interest / 100);
+                        }
+                    }
+                    
+                    if (testBalance >= goalAmount) {
+                        high = mid; // We're saving too much, try less
+                    } else {
+                        low = mid; // We're not saving enough, try more
+                    }
+                }
+                
+                weeklyExtra = Math.ceil(high * 100) / 100; // Round up to nearest cent
+            }
+            
+            // Recalculate future balance with the precise weekly extra to show the user
+            let futureBalanceWithExtra = currentBalance;
+            for (const { date, type } of allDates) {
+                if (type === 'saturday') {
+                    futureBalanceWithExtra += data.current_allowance + weeklyExtra;
+                } else {
+                    futureBalanceWithExtra *= (1 + data.current_interest / 100);
+                }
+            }
             
             res.json({
                 success: true,
@@ -841,6 +885,7 @@ app.post('/api/calculate-goal', async (req, res) => {
                 current_balance: currentBalance,
                 goal_amount: goalAmount,
                 future_balance: futureBalance,
+                future_balance_with_extra: futureBalanceWithExtra,
                 shortfall: shortfall,
                 days_until_goal: daysUntilGoal,
                 allowance_payments: saturdays.length,
