@@ -1,0 +1,556 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const session = require('express-session');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const app = express();
+const PORT = process.env.PORT || 8080;
+const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
+
+// Middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static('public'));
+app.use(session({
+    secret: 'bank-app-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+}));
+
+// ========== UTILITY FUNCTIONS ==========
+
+// Date utility functions
+function getNextSaturday(date) {
+    const daysUntilSaturday = (6 - date.getDay()) % 7;
+    if (daysUntilSaturday === 0 && date.getDay() === 6) {
+        return new Date(date);
+    }
+    const nextSaturday = new Date(date);
+    nextSaturday.setDate(date.getDate() + (daysUntilSaturday === 0 ? 7 : daysUntilSaturday));
+    return nextSaturday;
+}
+
+function getNextSunday(date) {
+    const daysUntilSunday = (7 - date.getDay()) % 7;
+    if (daysUntilSunday === 0 && date.getDay() === 0) {
+        return new Date(date);
+    }
+    const nextSunday = new Date(date);
+    nextSunday.setDate(date.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
+    return nextSunday;
+}
+
+function getSaturdaysBetween(startDate, endDate) {
+    const saturdays = [];
+    let current = getNextSaturday(startDate);
+    while (current <= endDate) {
+        saturdays.push(new Date(current));
+        current.setDate(current.getDate() + 7);
+    }
+    return saturdays;
+}
+
+function getSundaysBetween(startDate, endDate) {
+    const sundays = [];
+    let current = getNextSunday(startDate);
+    while (current <= endDate) {
+        sundays.push(new Date(current));
+        current.setDate(current.getDate() + 7);
+    }
+    return sundays;
+}
+
+function formatDate(date) {
+    return date.toISOString().split('T')[0];
+}
+
+function parseDate(dateString) {
+    return new Date(dateString);
+}
+
+// Authentication
+function authenticate(username, password) {
+    const validUser = "dad";
+    const validPassHash = crypto.createHash('sha256').update("Pass1345").digest('hex');
+    const userPassHash = crypto.createHash('sha256').update(password).digest('hex');
+    return username === validUser && userPassHash === validPassHash;
+}
+
+// Data management
+function loadAccountData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+            
+            // Convert date strings back to Date objects
+            if (data.start_date) data.start_date = parseDate(data.start_date);
+            if (data.settings_change_date) data.settings_change_date = parseDate(data.settings_change_date);
+            if (data.last_processed_saturday) data.last_processed_saturday = parseDate(data.last_processed_saturday);
+            if (data.last_processed_sunday) data.last_processed_sunday = parseDate(data.last_processed_sunday);
+            
+            // Convert transaction dates
+            if (data.manual_txns) {
+                data.manual_txns.forEach(txn => {
+                    txn.Date = parseDate(txn.Date);
+                });
+            }
+            if (data.auto_deposits) {
+                data.auto_deposits.forEach(txn => {
+                    txn.Date = parseDate(txn.Date);
+                });
+            }
+            
+            return data;
+        }
+    } catch (error) {
+        console.error('Error loading account data:', error);
+    }
+    
+    // Default data structure
+    return {
+        account_holder: "My",
+        initial_balance: 0.0,
+        start_date: new Date('2024-01-01'),
+        initial_allowance: 5.0,
+        initial_interest: 1.0,
+        current_allowance: 5.0,
+        current_interest: 1.0,
+        settings_change_date: null,
+        manual_txns: [],
+        last_processed_saturday: null,
+        last_processed_sunday: null,
+        auto_deposits: []
+    };
+}
+
+function saveAccountData(data) {
+    try {
+        // Create a copy for saving with dates converted to strings
+        const saveData = { ...data };
+        
+        // Convert dates to strings
+        if (saveData.start_date) saveData.start_date = formatDate(saveData.start_date);
+        if (saveData.settings_change_date) saveData.settings_change_date = formatDate(saveData.settings_change_date);
+        if (saveData.last_processed_saturday) saveData.last_processed_saturday = formatDate(saveData.last_processed_saturday);
+        if (saveData.last_processed_sunday) saveData.last_processed_sunday = formatDate(saveData.last_processed_sunday);
+        
+        // Convert transaction dates
+        if (saveData.manual_txns) {
+            saveData.manual_txns = saveData.manual_txns.map(txn => ({
+                ...txn,
+                Date: formatDate(txn.Date)
+            }));
+        }
+        if (saveData.auto_deposits) {
+            saveData.auto_deposits = saveData.auto_deposits.map(txn => ({
+                ...txn,
+                Date: formatDate(txn.Date)
+            }));
+        }
+        
+        // Ensure data directory exists
+        const dataDir = path.dirname(DATA_FILE);
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        
+        fs.writeFileSync(DATA_FILE, JSON.stringify(saveData, null, 2));
+        return true;
+    } catch (error) {
+        console.error('Error saving account data:', error);
+        return false;
+    }
+}
+
+function processNewDeposits(data) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Determine starting points for processing
+    const saturdayStart = data.last_processed_saturday 
+        ? new Date(data.last_processed_saturday.getTime() + 24 * 60 * 60 * 1000)
+        : data.start_date;
+    
+    const sundayStart = data.last_processed_sunday
+        ? new Date(data.last_processed_sunday.getTime() + 24 * 60 * 60 * 1000)
+        : data.start_date;
+    
+    // Get all dates that need processing
+    const saturdays = getSaturdaysBetween(saturdayStart, today);
+    const sundays = getSundaysBetween(sundayStart, today);
+    
+    // Combine and sort all dates
+    const allDates = [
+        ...saturdays.map(date => ({ date, type: 'saturday' })),
+        ...sundays.map(date => ({ date, type: 'sunday' }))
+    ].sort((a, b) => a.date - b.date);
+    
+    if (allDates.length > 0) {
+        // Calculate running balance
+        const allTxns = [...data.auto_deposits, ...data.manual_txns];
+        allTxns.sort((a, b) => a.Date - b.Date);
+        
+        let balance = data.initial_balance;
+        for (const txn of allTxns) {
+            balance += txn.Amount;
+        }
+        
+        // Process each date
+        for (const { date, type } of allDates) {
+            // Determine which settings to use
+            const useCurrentSettings = data.settings_change_date && date >= data.settings_change_date;
+            const allowance = useCurrentSettings ? data.current_allowance : data.initial_allowance;
+            const interestRate = useCurrentSettings ? data.current_interest : data.initial_interest;
+            
+            if (type === 'saturday') {
+                // Add allowance
+                data.auto_deposits.push({
+                    Date: new Date(date),
+                    Type: "Weekly Allowance",
+                    Amount: allowance
+                });
+                balance += allowance;
+                data.last_processed_saturday = new Date(date);
+            } else if (type === 'sunday') {
+                // Calculate interest on current balance
+                const interest = balance * (interestRate / 100);
+                if (interest > 0) {
+                    data.auto_deposits.push({
+                        Date: new Date(date),
+                        Type: "Interest 😊",
+                        Amount: interest
+                    });
+                    balance += interest;
+                }
+                data.last_processed_sunday = new Date(date);
+            }
+        }
+        
+        saveAccountData(data);
+        return true;
+    }
+    return false;
+}
+
+function recalculateAllDeposits(data) {
+    data.auto_deposits = [];
+    data.last_processed_saturday = null;
+    data.last_processed_sunday = null;
+    processNewDeposits(data);
+}
+
+function getCurrentTime() {
+    return new Date().toLocaleString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    });
+}
+
+// ========== API ROUTES ==========
+
+// Authentication
+app.post('/api/auth/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    if (authenticate(username, password)) {
+        req.session.authenticated = true;
+        res.json({ success: true });
+    } else {
+        res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy();
+    res.json({ success: true });
+});
+
+app.get('/api/auth/status', (req, res) => {
+    res.json({ authenticated: !!req.session.authenticated });
+});
+
+// Account data
+app.get('/api/account', (req, res) => {
+    try {
+        const data = loadAccountData();
+        processNewDeposits(data);
+        
+        // Calculate current balance
+        const allTxns = [...data.auto_deposits, ...data.manual_txns];
+        allTxns.sort((a, b) => a.Date - b.Date);
+        
+        let currentBalance = data.initial_balance;
+        const transactions = [];
+        
+        for (let i = 0; i < allTxns.length; i++) {
+            const txn = allTxns[i];
+            currentBalance += txn.Amount;
+            transactions.push({
+                Date: formatDate(txn.Date),
+                Type: txn.Type,
+                Amount: txn.Amount,
+                Balance: currentBalance,
+                isManual: data.manual_txns.includes(txn),
+                manualIndex: data.manual_txns.indexOf(txn)
+            });
+        }
+        
+        // Calculate next deposit info
+        const today = new Date();
+        const nextSaturday = getNextSaturday(today.getDay() === 6 ? new Date(today.getTime() + 24 * 60 * 60 * 1000) : today);
+        const nextSunday = getNextSunday(today.getDay() === 0 ? new Date(today.getTime() + 24 * 60 * 60 * 1000) : today);
+        
+        const daysUntilSaturday = Math.floor((nextSaturday - today) / (24 * 60 * 60 * 1000));
+        const daysUntilSunday = Math.floor((nextSunday - today) / (24 * 60 * 60 * 1000));
+        
+        res.json({
+            account_holder: data.account_holder,
+            initial_balance: data.initial_balance,
+            start_date: formatDate(data.start_date),
+            initial_allowance: data.initial_allowance,
+            initial_interest: data.initial_interest,
+            current_allowance: data.current_allowance,
+            current_interest: data.current_interest,
+            settings_change_date: data.settings_change_date ? formatDate(data.settings_change_date) : null,
+            current_balance: currentBalance,
+            transactions: transactions,
+            current_time: getCurrentTime(),
+            next_saturday: formatDate(nextSaturday),
+            next_sunday: formatDate(nextSunday),
+            days_until_saturday: daysUntilSaturday,
+            days_until_sunday: daysUntilSunday,
+            is_saturday: today.getDay() === 6,
+            is_sunday: today.getDay() === 0
+        });
+    } catch (error) {
+        console.error('Error getting account data:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Update settings
+app.post('/api/settings/initial', (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    
+    try {
+        const data = loadAccountData();
+        const { account_holder, initial_balance, start_date, initial_allowance, initial_interest } = req.body;
+        
+        data.account_holder = account_holder || data.account_holder;
+        data.initial_balance = parseFloat(initial_balance) || data.initial_balance;
+        data.start_date = parseDate(start_date) || data.start_date;
+        data.initial_allowance = parseFloat(initial_allowance) || data.initial_allowance;
+        data.initial_interest = parseFloat(initial_interest) || data.initial_interest;
+        
+        // If current settings haven't been customized, update them too
+        if (!data.settings_change_date) {
+            data.current_allowance = data.initial_allowance;
+            data.current_interest = data.initial_interest;
+        }
+        
+        recalculateAllDeposits(data);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating initial settings:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+app.post('/api/settings/current', (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    
+    try {
+        const data = loadAccountData();
+        const { current_allowance, current_interest } = req.body;
+        
+        data.current_allowance = parseFloat(current_allowance) || data.current_allowance;
+        data.current_interest = parseFloat(current_interest) || data.current_interest;
+        
+        // Set change date if not already set
+        if (!data.settings_change_date) {
+            data.settings_change_date = new Date();
+        }
+        
+        saveAccountData(data);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating current settings:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Add manual transaction
+app.post('/api/transaction', (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    
+    try {
+        const data = loadAccountData();
+        const { type, name, amount, date } = req.body;
+        
+        if (!name || !amount || amount <= 0) {
+            return res.status(400).json({ success: false, message: 'Invalid transaction data' });
+        }
+        
+        const transactionAmount = type === 'Deposit' ? parseFloat(amount) : -parseFloat(amount);
+        const transactionDate = date ? parseDate(date) : new Date();
+        
+        data.manual_txns.push({
+            Date: transactionDate,
+            Type: name,
+            Amount: transactionAmount
+        });
+        
+        // Recalculate all deposits after adding manual transaction
+        recalculateAllDeposits(data);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error adding transaction:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Delete manual transaction
+app.delete('/api/transaction/:index', (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    
+    try {
+        const data = loadAccountData();
+        const index = parseInt(req.params.index);
+        
+        if (index < 0 || index >= data.manual_txns.length) {
+            return res.status(400).json({ success: false, message: 'Invalid transaction index' });
+        }
+        
+        // Remove the transaction
+        data.manual_txns.splice(index, 1);
+        
+        // Recalculate all deposits after removing manual transaction
+        recalculateAllDeposits(data);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting transaction:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Savings goal calculator
+app.post('/api/calculate-goal', (req, res) => {
+    try {
+        const data = loadAccountData();
+        const { goal_amount, goal_date } = req.body;
+        
+        const goalAmount = parseFloat(goal_amount);
+        const goalDate = parseDate(goal_date);
+        const today = new Date();
+        
+        // Calculate current balance
+        const allTxns = [...data.auto_deposits, ...data.manual_txns];
+        let currentBalance = data.initial_balance;
+        for (const txn of allTxns) {
+            currentBalance += txn.Amount;
+        }
+        
+        if (goalAmount <= currentBalance) {
+            return res.json({
+                success: true,
+                already_reached: true,
+                message: "🎉 You've already reached your goal!"
+            });
+        }
+        
+        const nextSaturday = getNextSaturday(today);
+        const nextSunday = getNextSunday(today);
+        
+        const saturdays = getSaturdaysBetween(nextSaturday, goalDate);
+        const sundays = getSundaysBetween(nextSunday, goalDate);
+        
+        if (saturdays.length === 0 && sundays.length === 0) {
+            return res.json({
+                success: false,
+                message: "Your goal date is before the next deposit."
+            });
+        }
+        
+        // Simulate future balance
+        let futureBalance = currentBalance;
+        const allDates = [
+            ...saturdays.map(date => ({ date, type: 'saturday' })),
+            ...sundays.map(date => ({ date, type: 'sunday' }))
+        ].sort((a, b) => a.date - b.date);
+        
+        for (const { type } of allDates) {
+            if (type === 'saturday') {
+                futureBalance += data.current_allowance;
+            } else {
+                futureBalance *= (1 + data.current_interest / 100);
+            }
+        }
+        
+        const daysUntilGoal = Math.floor((goalDate - today) / (24 * 60 * 60 * 1000));
+        
+        if (futureBalance >= goalAmount) {
+            res.json({
+                success: true,
+                will_reach: true,
+                days_until_goal: daysUntilGoal,
+                allowance_payments: saturdays.length,
+                interest_payments: sundays.length,
+                message: "✅ You'll reach your goal with current allowance and interest!"
+            });
+        } else {
+            const shortfall = goalAmount - futureBalance;
+            const weeklyExtra = saturdays.length > 0 ? shortfall / saturdays.length : 0;
+            
+            res.json({
+                success: true,
+                will_reach: false,
+                shortfall: shortfall,
+                days_until_goal: daysUntilGoal,
+                allowance_payments: saturdays.length,
+                interest_payments: sundays.length,
+                weekly_extra_needed: weeklyExtra,
+                message: `📊 You need $${shortfall.toFixed(2)} more to reach your goal.`
+            });
+        }
+    } catch (error) {
+        console.error('Error calculating savings goal:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+// Serve main page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start server
+app.listen(PORT, '127.0.0.1', (err) => {
+    if (err) {
+        console.error('Failed to start server:', err);
+        process.exit(1);
+    }
+    console.log(`Bank app server running on http://localhost:${PORT}`);
+    console.log(`Try opening: http://127.0.0.1:${PORT}`);
+}).on('error', (err) => {
+    console.error('Server error:', err);
+    if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use. Try a different port.`);
+    }
+});

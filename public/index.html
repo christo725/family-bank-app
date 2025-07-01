@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Bank Account</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation/Header -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">
+                <span id="currentTime" class="navbar-text text-light" style="font-size: 0.8rem;"></span>
+            </span>
+            <div class="navbar-nav ms-auto">
+                <button id="settingsBtn" class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- Logo and Account Name -->
+        <div class="text-center mb-4">
+            <div id="logoContainer" class="mb-3">
+                <img id="logoImage" src="images/logo.png" alt="Bank Logo" class="logo" style="max-height: 100px; width: auto;">
+            </div>
+            <h1 class="display-4 mb-2" id="accountTitle">My Bank Account</h1>
+        </div>
+
+        <!-- Current Balance -->
+        <div class="text-center mb-4">
+            <h2 class="text-muted mb-2">Current Balance</h2>
+            <h1 class="display-3 text-success mb-3" id="currentBalance">$0.00</h1>
+        </div>
+
+        <!-- Next Deposit Info -->
+        <div class="row justify-content-center mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h3 id="nextDepositTitle">Next Deposit</h3>
+                        <h4 class="text-primary" id="nextDepositDate"></h4>
+                        <p class="text-muted" id="nextDepositDays"></p>
+                        
+                        <hr>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h5>Current Weekly Allowance</h5>
+                                <h3 class="text-success" id="currentAllowance">$0.00</h3>
+                            </div>
+                            <div class="col-md-6">
+                                <h5>Current Weekly Interest Rate</h5>
+                                <h3 class="text-primary" id="currentInterest">0%</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance Chart -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4><i class="fas fa-chart-line"></i> Balance Growth Over Time</h4>
+            </div>
+            <div class="card-body">
+                <canvas id="balanceChart" width="400" height="200"></canvas>
+                <div id="noDataMessage" class="text-center text-muted" style="display: none;">
+                    <p>No transactions yet. Transactions will appear after the first Saturday.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transaction History -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4><i class="fas fa-list"></i> Transaction History</h4>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped" id="transactionTable">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="noTransactionsMessage" class="text-center text-muted" style="display: none;">
+                    <p>No transactions yet.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Savings Goal Calculator -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4><i class="fas fa-bullseye"></i> Savings Goal Calculator</h4>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="goalAmount" class="form-label">Goal Amount ($)</label>
+                            <input type="number" class="form-control" id="goalAmount" min="0" step="5" value="100">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="goalDate" class="form-label">Target Date</label>
+                            <input type="date" class="form-control" id="goalDate">
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="calculateSavingsGoal()">
+                    <i class="fas fa-calculator"></i> Calculate Savings Plan
+                </button>
+                <div id="goalResults" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog"></i> Account Settings
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Login Section -->
+                    <div id="loginSection">
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-lock"></i> Parent Login</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control mb-2" id="loginUsername" placeholder="Username">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <input type="password" class="form-control mb-2" id="loginPassword" placeholder="Password">
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" onclick="login()">Login</button>
+                                <div id="loginMessage" class="mt-2"></div>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> 
+                            Log in as parent to change settings.<br>
+                            💡 Allowance credited on Saturdays<br>
+                            💡 Interest credited on Sundays
+                        </div>
+                    </div>
+
+                    <!-- Settings Section (hidden until authenticated) -->
+                    <div id="settingsSection" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">Logged in as Parent</h6>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="logout()">Logout</button>
+                        </div>
+
+                        <!-- Account Holder Name -->
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="accountHolder" class="form-label">Account Holder Name</label>
+                                    <input type="text" class="form-control" id="accountHolder">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Initial Setup Settings -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-university"></i> Initial Account Setup</h6>
+                                <small class="text-warning">⚠️ Changing these will recalculate entire history</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="startDate" class="form-label">Account Start Date</label>
+                                            <input type="date" class="form-control" id="startDate">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="initialBalance" class="form-label">Initial Balance ($)</label>
+                                            <input type="number" class="form-control" id="initialBalance" min="0" step="0.5">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="initialAllowance" class="form-label">Initial Weekly Allowance ($)</label>
+                                            <input type="number" class="form-control" id="initialAllowance" min="0" step="0.5">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="initialInterest" class="form-label">Initial Weekly Interest Rate (%)</label>
+                                            <input type="number" class="form-control" id="initialInterest" min="0" step="0.1">
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-warning" onclick="updateInitialSettings()">
+                                    <i class="fas fa-sync"></i> Update Initial Settings
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Current Settings -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-dollar-sign"></i> Current Rates</h6>
+                                <small class="text-muted">For future deposits only</small>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="currentAllowanceInput" class="form-label">Current Weekly Allowance ($)</label>
+                                            <input type="number" class="form-control" id="currentAllowanceInput" min="0" step="0.5">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="currentInterestInput" class="form-label">Current Weekly Interest Rate (%)</label>
+                                            <input type="number" class="form-control" id="currentInterestInput" min="0" step="0.1">
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" onclick="updateCurrentSettings()">
+                                    <i class="fas fa-save"></i> Update Current Rates
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Manual Transaction -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-plus-minus"></i> Manual Transaction</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label for="transactionType" class="form-label">Type</label>
+                                            <select class="form-select" id="transactionType">
+                                                <option value="Deposit">Deposit</option>
+                                                <option value="Withdrawal">Withdrawal</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label for="transactionName" class="form-label">Name</label>
+                                            <input type="text" class="form-control" id="transactionName" placeholder="e.g., Birthday gift">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label for="transactionAmount" class="form-label">Amount ($)</label>
+                                            <input type="number" class="form-control" id="transactionAmount" min="0" step="0.5">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="mb-3">
+                                            <label for="transactionDate" class="form-label">Date</label>
+                                            <input type="date" class="form-control" id="transactionDate">
+                                        </div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-success" onclick="addTransaction()">
+                                    <i class="fas fa-plus"></i> Add Transaction
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Transaction Management -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-list"></i> Transaction Management</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm" id="settingsTransactionTable">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Type</th>
+                                                <th>Amount</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="settingsTransactionTableBody">
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div id="noManualTransactionsMessage" class="text-center text-muted" style="display: none;">
+                                    <p>No manual transactions yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom JS -->
+    <script src="js/app.js"></script>
+</body>
+</html>

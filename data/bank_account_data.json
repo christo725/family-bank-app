@@ -1,0 +1,105 @@
+{
+  "account_holder": "Patrick",
+  "initial_balance": 0,
+  "start_date": "2025-05-01",
+  "initial_allowance": 3,
+  "initial_interest": 3,
+  "current_allowance": 2,
+  "current_interest": 3,
+  "settings_change_date": "2025-07-01",
+  "manual_txns": [],
+  "last_processed_saturday": "2025-06-29",
+  "last_processed_sunday": "2025-06-30",
+  "auto_deposits": [
+    {
+      "Date": "2025-05-04",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-05-05",
+      "Type": "Interest 😊",
+      "Amount": 0.09
+    },
+    {
+      "Date": "2025-05-11",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-05-12",
+      "Type": "Interest 😊",
+      "Amount": 0.1827
+    },
+    {
+      "Date": "2025-05-18",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-05-19",
+      "Type": "Interest 😊",
+      "Amount": 0.278181
+    },
+    {
+      "Date": "2025-05-25",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-05-26",
+      "Type": "Interest 😊",
+      "Amount": 0.37652643
+    },
+    {
+      "Date": "2025-06-01",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-06-02",
+      "Type": "Interest 😊",
+      "Amount": 0.4778222229
+    },
+    {
+      "Date": "2025-06-08",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-06-09",
+      "Type": "Interest 😊",
+      "Amount": 0.582156889587
+    },
+    {
+      "Date": "2025-06-15",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-06-16",
+      "Type": "Interest 😊",
+      "Amount": 0.6896215962746101
+    },
+    {
+      "Date": "2025-06-22",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-06-23",
+      "Type": "Interest 😊",
+      "Amount": 0.8003102441628483
+    },
+    {
+      "Date": "2025-06-29",
+      "Type": "Weekly Allowance",
+      "Amount": 3
+    },
+    {
+      "Date": "2025-06-30",
+      "Type": "Interest 😊",
+      "Amount": 0.9143195514877337
+    }
+  ]
+}
