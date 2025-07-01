@@ -181,11 +181,15 @@ async function logout() {
 
 // Load account data
 async function loadAccountData() {
+    console.log('Loading account data...');
     try {
         const response = await fetch('/api/account', {
             credentials: 'include'
         });
         accountData = await response.json();
+        
+        console.log('Account data loaded successfully. Transaction count:', accountData.transactions?.length || 0);
+        console.log('Manual transactions:', accountData.transactions?.filter(t => t.isManual).length || 0);
         
         updateUI();
         updateSettingsForm();
@@ -297,6 +301,9 @@ function updateSettingsTransactionTable() {
     
     // Filter only manual transactions
     const manualTransactions = accountData.transactions ? accountData.transactions.filter(txn => txn.isManual) : [];
+    
+    console.log('Updating settings transaction table. Manual transactions:', manualTransactions.length);
+    console.log('Manual transactions details:', manualTransactions.map(t => ({ type: t.Type, amount: t.Amount, manualIndex: t.manualIndex })));
     
     if (manualTransactions.length > 0) {
         manualTransactions.forEach(txn => {
@@ -548,6 +555,8 @@ async function addTransaction() {
 
 // Delete manual transaction
 async function deleteTransaction(manualIndex) {
+    console.log('Delete transaction called with manualIndex:', manualIndex);
+    
     if (!isAuthenticated) return;
     
     if (!confirm('Are you sure you want to delete this transaction? This will recalculate all subsequent balances and interest payments.')) {
@@ -555,14 +564,19 @@ async function deleteTransaction(manualIndex) {
     }
     
     try {
+        console.log('Sending DELETE request to:', `/api/transaction/${manualIndex}`);
         const response = await fetch(`/api/transaction/${manualIndex}`, {
             method: 'DELETE',
             credentials: 'include'
         });
         
+        console.log('Delete response status:', response.status);
+        
         if (response.ok) {
             showAlert('Transaction deleted successfully!', 'success');
+            console.log('About to reload account data after delete...');
             await loadAccountData(); // Reload data
+            console.log('Account data reloaded after delete');
         } else {
             showAlert('Error deleting transaction', 'danger');
         }
