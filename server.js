@@ -713,6 +713,9 @@ app.post('/api/settings/current', async (req, res) => {
 
 // Add manual transaction
 app.post('/api/transaction', async (req, res) => {
+    console.log('=== MANUAL TRANSACTION ADD ===');
+    console.log('Request body:', req.body);
+    
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
@@ -728,14 +731,26 @@ app.post('/api/transaction', async (req, res) => {
         const transactionAmount = type === 'Deposit' ? parseFloat(amount) : -parseFloat(amount);
         const transactionDate = date ? parseDate(date) : new Date();
         
+        console.log('Adding manual transaction:', {
+            type: name,
+            amount: transactionAmount,
+            date: formatDate(transactionDate)
+        });
+        console.log('Manual transactions before add:', data.manual_txns.length);
+        
         data.manual_txns.push({
             Date: transactionDate,
             Type: name,
             Amount: transactionAmount
         });
         
+        console.log('Manual transactions after add:', data.manual_txns.length);
+        console.log('About to call recalculateFromTransaction...');
+        
         // Recalculate deposits from the transaction date forward
         await recalculateFromTransaction(data, transactionDate);
+        
+        console.log('Recalculation completed, sending success response');
         res.json({ success: true });
     } catch (error) {
         console.error('Error adding transaction:', error);
