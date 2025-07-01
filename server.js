@@ -396,11 +396,30 @@ app.post('/api/settings/initial', (req, res) => {
         const data = loadAccountData();
         const { account_holder, initial_balance, start_date, initial_allowance, initial_interest } = req.body;
         
-        data.account_holder = account_holder || data.account_holder;
-        data.initial_balance = parseFloat(initial_balance) || data.initial_balance;
-        data.start_date = parseDate(start_date) || data.start_date;
-        data.initial_allowance = parseFloat(initial_allowance) || data.initial_allowance;
-        data.initial_interest = parseFloat(initial_interest) || data.initial_interest;
+        if (account_holder !== undefined && account_holder !== null && account_holder !== '') {
+            data.account_holder = account_holder;
+        }
+        if (initial_balance !== undefined && initial_balance !== null && initial_balance !== '') {
+            const balanceValue = parseFloat(initial_balance);
+            if (!isNaN(balanceValue) && balanceValue >= 0) {
+                data.initial_balance = balanceValue;
+            }
+        }
+        if (start_date !== undefined && start_date !== null && start_date !== '') {
+            data.start_date = parseDate(start_date);
+        }
+        if (initial_allowance !== undefined && initial_allowance !== null && initial_allowance !== '') {
+            const allowanceValue = parseFloat(initial_allowance);
+            if (!isNaN(allowanceValue) && allowanceValue >= 0) {
+                data.initial_allowance = allowanceValue;
+            }
+        }
+        if (initial_interest !== undefined && initial_interest !== null && initial_interest !== '') {
+            const interestValue = parseFloat(initial_interest);
+            if (!isNaN(interestValue) && interestValue >= 0) {
+                data.initial_interest = interestValue;
+            }
+        }
         
         // If current settings haven't been customized, update them too
         if (!data.settings_change_date) {
@@ -425,16 +444,37 @@ app.post('/api/settings/current', (req, res) => {
         const data = loadAccountData();
         const { current_allowance, current_interest } = req.body;
         
-        data.current_allowance = parseFloat(current_allowance) || data.current_allowance;
-        data.current_interest = parseFloat(current_interest) || data.current_interest;
+        console.log('Updating current settings:', { current_allowance, current_interest });
+        
+        if (current_allowance !== undefined && current_allowance !== null && current_allowance !== '') {
+            const allowanceValue = parseFloat(current_allowance);
+            if (!isNaN(allowanceValue) && allowanceValue >= 0) {
+                data.current_allowance = allowanceValue;
+            }
+        }
+        if (current_interest !== undefined && current_interest !== null && current_interest !== '') {
+            const interestValue = parseFloat(current_interest);
+            if (!isNaN(interestValue) && interestValue >= 0) {
+                data.current_interest = interestValue;
+            }
+        }
         
         // Set change date if not already set
         if (!data.settings_change_date) {
             data.settings_change_date = new Date();
         }
         
-        saveAccountData(data);
-        res.json({ success: true });
+        const saved = saveAccountData(data);
+        if (saved) {
+            console.log('Updated current settings successfully:', { 
+                current_allowance: data.current_allowance, 
+                current_interest: data.current_interest 
+            });
+            res.json({ success: true });
+        } else {
+            console.error('Failed to save account data');
+            res.status(500).json({ success: false, message: 'Failed to save data' });
+        }
     } catch (error) {
         console.error('Error updating current settings:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
