@@ -27,14 +27,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log('App initialized successfully!');
-        
-        // Test function accessibility
-        if (typeof updateCurrentSettings === 'function') {
-            console.log('updateCurrentSettings function is defined');
-        } else {
-            console.error('updateCurrentSettings function is NOT defined!');
-        }
-        
     } catch (error) {
         console.error('Error initializing app:', error);
         document.body.innerHTML = '<div class="container mt-5"><h1>Loading Error</h1><p>Error: ' + error.message + '</p></div>';
@@ -441,6 +433,9 @@ async function updateInitialSettings() {
         initial_interest: document.getElementById('initialInterest').value
     };
     
+    console.log('Initial settings form values collected:', data);
+    console.log('About to send fetch request to /api/settings/initial');
+    
     try {
         const response = await fetch('/api/settings/initial', {
             method: 'POST',
@@ -451,11 +446,15 @@ async function updateInitialSettings() {
             body: JSON.stringify(data)
         });
         
+        const responseText = await response.text();
+        console.log('Initial settings server response:', response.status, responseText);
+        
         if (response.ok) {
             showAlert('Initial settings updated successfully! History has been recalculated.', 'success');
             await loadAccountData(); // Reload data
         } else {
-            showAlert('Error updating initial settings', 'danger');
+            console.error('Initial settings server error:', response.status, responseText);
+            showAlert(`Error updating initial settings: ${responseText}`, 'danger');
         }
     } catch (error) {
         console.error('Error updating initial settings:', error);
@@ -465,9 +464,7 @@ async function updateInitialSettings() {
 
 // Update current settings
 async function updateCurrentSettings() {
-    console.log('Update function called, authenticated:', isAuthenticated);
-    console.log('Button clicked - starting update process');
-    alert('Function called! Check console for details.');
+    console.log('Update current settings called, authenticated:', isAuthenticated);
     
     if (!isAuthenticated) {
         showAlert('You must be logged in to update settings', 'warning');
@@ -479,8 +476,7 @@ async function updateCurrentSettings() {
         current_interest: document.getElementById('currentInterestInput').value
     };
     
-    console.log('Form values collected:', data);
-    console.log('About to send fetch request to /api/settings/current');
+    console.log('Updating current settings:', data);
     
     try {
         const response = await fetch('/api/settings/current', {

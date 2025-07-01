@@ -813,31 +813,6 @@ app.post('/api/calculate-goal', async (req, res) => {
     }
 });
 
-// Debug endpoint - temporarily bypass auth for testing
-app.get('/api/debug/test-save', async (req, res) => {
-    try {
-        console.log('DEBUG: Test save endpoint called');
-        const data = await loadAccountData();
-        data.current_allowance = 999.99; // Test value
-        data.current_interest = 5.5; // Test value
-        const saved = await saveAccountData(data);
-        
-        console.log('DEBUG: Save result:', saved);
-        
-        // Verify by reloading
-        const verifyData = await loadAccountData();
-        console.log('DEBUG: Verification - allowance:', verifyData.current_allowance);
-        
-        res.json({ 
-            success: saved, 
-            test_allowance: verifyData.current_allowance,
-            test_interest: verifyData.current_interest
-        });
-    } catch (error) {
-        console.error('DEBUG: Test save error:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
