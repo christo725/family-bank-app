@@ -157,9 +157,9 @@ async function loadAccountData() {
     try {
         // Try to load from Redis first
         if (redis) {
-            const dataStr = await redis.get('bank_account_data');
-            if (dataStr) {
-                const data = JSON.parse(dataStr);
+            const data = await redis.get('bank_account_data');
+            if (data) {
+                // Redis.fromEnv() automatically deserializes JSON, so data is already an object
                 
                 // Convert date strings back to Date objects
                 if (data.start_date) data.start_date = parseDate(data.start_date);
@@ -256,7 +256,7 @@ async function saveAccountData(data) {
         // Save to Redis if available
         if (redis) {
             try {
-                await redis.set('bank_account_data', JSON.stringify(saveData));
+                await redis.set('bank_account_data', saveData);
                 console.log('Data saved to Redis successfully');
                 return true;
             } catch (redisError) {
