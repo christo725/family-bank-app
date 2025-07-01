@@ -6,7 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 10000;
 const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
 
 // Middleware
@@ -541,13 +541,16 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '127.0.0.1', (err) => {
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, (err) => {
     if (err) {
         console.error('Failed to start server:', err);
         process.exit(1);
     }
-    console.log(`Bank app server running on http://localhost:${PORT}`);
-    console.log(`Try opening: http://127.0.0.1:${PORT}`);
+    console.log(`Bank app server running on http://${HOST}:${PORT}`);
+    if (process.env.NODE_ENV !== 'production') {
+        console.log(`Try opening: http://localhost:${PORT}`);
+    }
 }).on('error', (err) => {
     console.error('Server error:', err);
     if (err.code === 'EADDRINUSE') {
