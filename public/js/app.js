@@ -228,6 +228,9 @@ function updateUI() {
     
     // Update balance chart
     updateBalanceChart();
+    
+    // Update interest summary
+    updateInterestSummary();
 }
 
 // Update next deposit information
@@ -405,6 +408,33 @@ function updateBalanceChart() {
         canvas.style.display = 'none';
         noDataMsg.style.display = 'block';
     }
+}
+
+// Update interest summary
+function updateInterestSummary() {
+    if (!accountData || !accountData.transactions) {
+        document.getElementById('totalInterestEarned').textContent = '$0.00';
+        document.getElementById('balanceWithoutInterest').textContent = '$0.00';
+        return;
+    }
+    
+    let totalInterest = 0;
+    let balanceWithoutInterest = accountData.initial_balance || 0;
+    
+    // Calculate total interest earned and balance without interest
+    accountData.transactions.forEach(txn => {
+        if (txn.Type.includes('Interest')) {
+            // This is an interest payment
+            totalInterest += txn.Amount;
+        } else {
+            // This is allowance, manual deposit, or withdrawal
+            balanceWithoutInterest += txn.Amount;
+        }
+    });
+    
+    // Update the display
+    document.getElementById('totalInterestEarned').textContent = formatCurrency(totalInterest);
+    document.getElementById('balanceWithoutInterest').textContent = formatCurrency(balanceWithoutInterest);
 }
 
 // Update settings form with current data
@@ -621,11 +651,8 @@ async function calculateSavingsGoal() {
                         <h5>${data.message}</h5>
                         <p class="mb-0">${data.message2}</p>
                         <div class="mt-3">
-                            <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
-                                <i class="fas fa-sync"></i> Try Again
-                            </button>
                             <button class="btn btn-secondary btn-sm" onclick="resetSavingsGoal()">
-                                <i class="fas fa-redo"></i> New Goal
+                                <i class="fas fa-redo"></i> Calculate a New Goal
                             </button>
                         </div>
                     </div>
@@ -640,11 +667,8 @@ async function calculateSavingsGoal() {
                             You'll get ${data.allowance_payments} more allowances and ${data.interest_payments} interest payments.
                         </small>
                         <div class="mt-3">
-                            <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
-                                <i class="fas fa-sync"></i> Try Again
-                            </button>
                             <button class="btn btn-secondary btn-sm" onclick="resetSavingsGoal()">
-                                <i class="fas fa-redo"></i> New Goal
+                                <i class="fas fa-redo"></i> Calculate a New Goal
                             </button>
                         </div>
                     </div>
@@ -655,11 +679,8 @@ async function calculateSavingsGoal() {
                         <h5>${data.message}</h5>
                         <p class="mb-3">${data.message2}</p>
                         <div class="mt-3">
-                            <button class="btn btn-primary btn-sm me-2" onclick="calculateSavingsGoal()">
-                                <i class="fas fa-sync"></i> Try Again
-                            </button>
                             <button class="btn btn-secondary btn-sm" onclick="resetSavingsGoal()">
-                                <i class="fas fa-redo"></i> New Goal
+                                <i class="fas fa-redo"></i> Calculate a New Goal
                             </button>
                         </div>
                     </div>
