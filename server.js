@@ -309,6 +309,9 @@ function recalculateFromTransaction(data, transactionDate) {
     
     // Now use regular processNewDeposits to rebuild everything from that point
     processNewDeposits(data);
+    
+    // Ensure data is saved after recalculation
+    saveAccountData(data);
 }
 
 function recalculateAllDeposits(data) {
