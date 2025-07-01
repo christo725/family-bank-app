@@ -814,7 +814,7 @@ app.post('/api/calculate-goal', async (req, res) => {
 });
 
 // Debug endpoint - temporarily bypass auth for testing
-app.post('/api/debug/test-save', async (req, res) => {
+app.get('/api/debug/test-save', async (req, res) => {
     try {
         console.log('DEBUG: Test save endpoint called');
         const data = await loadAccountData();
