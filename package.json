@@ -10,12 +10,21 @@
   "engines": {
     "node": ">=14.0.0"
   },
-  "keywords": ["banking", "family", "allowance", "savings", "education", "kids", "money-management"],
+  "keywords": [
+    "banking",
+    "family",
+    "allowance",
+    "savings",
+    "education",
+    "kids",
+    "money-management"
+  ],
   "author": "Family Bank App",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
+    "@upstash/redis": "^1.35.1",
     "body-parser": "^1.20.2",
+    "express": "^4.18.2",
     "express-session": "^1.17.3",
     "node-fetch": "^3.3.2"
   }

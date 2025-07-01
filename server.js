@@ -4,6 +4,7 @@ const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { Redis } = require('@upstash/redis');
 
 // Set timezone if provided
 if (process.env.TZ) {
@@ -16,6 +17,39 @@ const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
 
 // In-memory storage for serverless environments
 let memoryStorage = null;
+
+// Initialize Redis client
+let redis = null;
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+}
+
+// Migration helper
+async function migrateDataToRedis() {
+    if (!redis) return;
+    
+    try {
+        // Check if data already exists in Redis
+        const redisData = await redis.get('bank_account_data');
+        if (redisData) {
+            console.log('Data already exists in Redis, skipping migration');
+            return;
+        }
+        
+        // Try to load from file system
+        if (fs.existsSync(DATA_FILE)) {
+            console.log('Migrating data from file system to Redis...');
+            const fileData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+            await redis.set('bank_account_data', JSON.stringify(fileData));
+            console.log('Migration completed successfully');
+        }
+    } catch (error) {
+        console.error('Error during migration:', error);
+    }
+}
 
 // Middleware
 app.use(bodyParser.json());
@@ -105,9 +139,38 @@ function authenticate(username, password) {
 }
 
 // Data management
-function loadAccountData() {
+async function loadAccountData() {
     try {
-        if (fs.existsSync(DATA_FILE)) {
+        // Try to load from Redis first
+        if (redis) {
+            const dataStr = await redis.get('bank_account_data');
+            if (dataStr) {
+                const data = JSON.parse(dataStr);
+                
+                // Convert date strings back to Date objects
+                if (data.start_date) data.start_date = parseDate(data.start_date);
+                if (data.settings_change_date) data.settings_change_date = parseDate(data.settings_change_date);
+                if (data.last_processed_saturday) data.last_processed_saturday = parseDate(data.last_processed_saturday);
+                if (data.last_processed_sunday) data.last_processed_sunday = parseDate(data.last_processed_sunday);
+                
+                // Convert transaction dates
+                if (data.manual_txns) {
+                    data.manual_txns.forEach(txn => {
+                        txn.Date = parseDate(txn.Date);
+                    });
+                }
+                if (data.auto_deposits) {
+                    data.auto_deposits.forEach(txn => {
+                        txn.Date = parseDate(txn.Date);
+                    });
+                }
+                
+                return data;
+            }
+        }
+        
+        // Fall back to file system for local development
+        if (!redis && fs.existsSync(DATA_FILE)) {
             const data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
             
             // Convert date strings back to Date objects
@@ -151,7 +214,7 @@ function loadAccountData() {
     };
 }
 
-function saveAccountData(data) {
+async function saveAccountData(data) {
     try {
         // Create a copy for saving with dates converted to strings
         const saveData = { ...data };
@@ -176,7 +239,13 @@ function saveAccountData(data) {
             }));
         }
         
-        // Ensure data directory exists
+        // Save to Redis if available
+        if (redis) {
+            await redis.set('bank_account_data', JSON.stringify(saveData));
+            return true;
+        }
+        
+        // Fall back to file system for local development
         const dataDir = path.dirname(DATA_FILE);
         if (!fs.existsSync(dataDir)) {
             fs.mkdirSync(dataDir, { recursive: true });
@@ -190,7 +259,7 @@ function saveAccountData(data) {
     }
 }
 
-function processNewDeposits(data) {
+async function processNewDeposits(data) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -254,13 +323,13 @@ function processNewDeposits(data) {
             }
         }
         
-        saveAccountData(data);
+        await saveAccountData(data);
         return true;
     }
     return false;
 }
 
-function recalculateFromTransaction(data, transactionDate) {
+async function recalculateFromTransaction(data, transactionDate) {
     // For simplicity and correctness, we'll recalculate everything from the earliest 
     // manual transaction date to avoid complex edge cases with partial recalculation
     
@@ -308,18 +377,18 @@ function recalculateFromTransaction(data, transactionDate) {
     data.last_processed_sunday = lastSunday;
     
     // Now use regular processNewDeposits to rebuild everything from that point
-    processNewDeposits(data);
+    await processNewDeposits(data);
     
     // Ensure data is saved after recalculation
-    saveAccountData(data);
+    await saveAccountData(data);
 }
 
-function recalculateAllDeposits(data) {
+async function recalculateAllDeposits(data) {
     data.auto_deposits = [];
     data.last_processed_saturday = null;
     data.last_processed_sunday = null;
-    processNewDeposits(data);
-    saveAccountData(data);
+    await processNewDeposits(data);
+    await saveAccountData(data);
 }
 
 function getCurrentTime() {
@@ -372,10 +441,10 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 // Account data
-app.get('/api/account', (req, res) => {
+app.get('/api/account', async (req, res) => {
     try {
-        const data = loadAccountData();
-        processNewDeposits(data);
+        const data = await loadAccountData();
+        await processNewDeposits(data);
         
         // Calculate current balance
         const allTxns = [...data.auto_deposits, ...data.manual_txns];
@@ -449,13 +518,13 @@ app.get('/api/account', (req, res) => {
 });
 
 // Update settings
-app.post('/api/settings/initial', (req, res) => {
+app.post('/api/settings/initial', async (req, res) => {
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
-        const data = loadAccountData();
+        const data = await loadAccountData();
         const { account_holder, initial_balance, start_date, initial_allowance, initial_interest } = req.body;
         
         if (account_holder !== undefined && account_holder !== null && account_holder !== '') {
@@ -489,7 +558,7 @@ app.post('/api/settings/initial', (req, res) => {
             data.current_interest = data.initial_interest;
         }
         
-        recalculateAllDeposits(data);
+        await recalculateAllDeposits(data);
         res.json({ success: true });
     } catch (error) {
         console.error('Error updating initial settings:', error);
@@ -497,13 +566,13 @@ app.post('/api/settings/initial', (req, res) => {
     }
 });
 
-app.post('/api/settings/current', (req, res) => {
+app.post('/api/settings/current', async (req, res) => {
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
-        const data = loadAccountData();
+        const data = await loadAccountData();
         const { current_allowance, current_interest } = req.body;
         
         console.log('Updating current settings:', { current_allowance, current_interest });
@@ -526,7 +595,7 @@ app.post('/api/settings/current', (req, res) => {
             data.settings_change_date = new Date();
         }
         
-        const saved = saveAccountData(data);
+        const saved = await saveAccountData(data);
         if (saved) {
             console.log('Updated current settings successfully:', { 
                 current_allowance: data.current_allowance, 
@@ -544,13 +613,13 @@ app.post('/api/settings/current', (req, res) => {
 });
 
 // Add manual transaction
-app.post('/api/transaction', (req, res) => {
+app.post('/api/transaction', async (req, res) => {
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
-        const data = loadAccountData();
+        const data = await loadAccountData();
         const { type, name, amount, date } = req.body;
         
         if (!name || !amount || amount <= 0) {
@@ -567,7 +636,7 @@ app.post('/api/transaction', (req, res) => {
         });
         
         // Recalculate deposits from the transaction date forward
-        recalculateFromTransaction(data, transactionDate);
+        await recalculateFromTransaction(data, transactionDate);
         res.json({ success: true });
     } catch (error) {
         console.error('Error adding transaction:', error);
@@ -576,13 +645,13 @@ app.post('/api/transaction', (req, res) => {
 });
 
 // Delete manual transaction
-app.delete('/api/transaction/:index', (req, res) => {
+app.delete('/api/transaction/:index', async (req, res) => {
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
-        const data = loadAccountData();
+        const data = await loadAccountData();
         const index = parseInt(req.params.index);
         
         if (index < 0 || index >= data.manual_txns.length) {
@@ -596,7 +665,7 @@ app.delete('/api/transaction/:index', (req, res) => {
         data.manual_txns.splice(index, 1);
         
         // Recalculate deposits from the transaction date forward
-        recalculateFromTransaction(data, transactionDate);
+        await recalculateFromTransaction(data, transactionDate);
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting transaction:', error);
@@ -605,9 +674,9 @@ app.delete('/api/transaction/:index', (req, res) => {
 });
 
 // Savings goal calculator
-app.post('/api/calculate-goal', (req, res) => {
+app.post('/api/calculate-goal', async (req, res) => {
     try {
-        const data = loadAccountData();
+        const data = await loadAccountData();
         const { goal_amount, goal_date } = req.body;
         
         const goalAmount = parseFloat(goal_amount);
@@ -710,14 +779,14 @@ app.get('/health', (req, res) => {
 });
 
 // Recalculate all deposits (admin endpoint)
-app.post('/api/recalculate', (req, res) => {
+app.post('/api/recalculate', async (req, res) => {
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
     try {
-        const data = loadAccountData();
-        recalculateAllDeposits(data);
+        const data = await loadAccountData();
+        await recalculateAllDeposits(data);
         res.json({ success: true, message: 'All deposits recalculated successfully' });
     } catch (error) {
         console.error('Error recalculating deposits:', error);
@@ -732,11 +801,15 @@ app.get('/', (req, res) => {
 
 // Start server
 const HOST = process.env.HOST || '0.0.0.0';
-app.listen(PORT, HOST, (err) => {
+app.listen(PORT, HOST, async (err) => {
     if (err) {
         console.error('Failed to start server:', err);
         process.exit(1);
     }
+    
+    // Run migration on startup
+    await migrateDataToRedis();
+    
     console.log(`Bank app server running on http://${HOST}:${PORT}`);
     if (process.env.NODE_ENV !== 'production') {
         console.log(`Try opening: http://localhost:${PORT}`);
