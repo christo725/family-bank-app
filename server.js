@@ -5,6 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+// Set timezone if provided
+if (process.env.TZ) {
+    process.env.TZ = process.env.TZ;
+}
+
 const app = express();
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
@@ -24,23 +29,35 @@ app.use(session({
 
 // Date utility functions
 function getNextSaturday(date) {
-    const daysUntilSaturday = (6 - date.getDay()) % 7;
-    if (daysUntilSaturday === 0 && date.getDay() === 6) {
-        return new Date(date);
+    const localDate = new Date(date);
+    // Ensure we're working with the date in local timezone
+    const day = localDate.getDay();
+    const daysUntilSaturday = (6 - day + 7) % 7;
+    
+    if (daysUntilSaturday === 0) {
+        // It's already Saturday, return next Saturday
+        localDate.setDate(localDate.getDate() + 7);
+    } else {
+        localDate.setDate(localDate.getDate() + daysUntilSaturday);
     }
-    const nextSaturday = new Date(date);
-    nextSaturday.setDate(date.getDate() + (daysUntilSaturday === 0 ? 7 : daysUntilSaturday));
-    return nextSaturday;
+    
+    return localDate;
 }
 
 function getNextSunday(date) {
-    const daysUntilSunday = (7 - date.getDay()) % 7;
-    if (daysUntilSunday === 0 && date.getDay() === 0) {
-        return new Date(date);
+    const localDate = new Date(date);
+    // Ensure we're working with the date in local timezone
+    const day = localDate.getDay();
+    const daysUntilSunday = (7 - day) % 7;
+    
+    if (daysUntilSunday === 0) {
+        // It's already Sunday, return next Sunday
+        localDate.setDate(localDate.getDate() + 7);
+    } else {
+        localDate.setDate(localDate.getDate() + daysUntilSunday);
     }
-    const nextSunday = new Date(date);
-    nextSunday.setDate(date.getDate() + (daysUntilSunday === 0 ? 7 : daysUntilSunday));
-    return nextSunday;
+    
+    return localDate;
 }
 
 function getSaturdaysBetween(startDate, endDate) {
@@ -306,8 +323,17 @@ app.get('/api/account', (req, res) => {
         
         // Calculate next deposit info
         const today = new Date();
-        const nextSaturday = getNextSaturday(today.getDay() === 6 ? new Date(today.getTime() + 24 * 60 * 60 * 1000) : today);
-        const nextSunday = getNextSunday(today.getDay() === 0 ? new Date(today.getTime() + 24 * 60 * 60 * 1000) : today);
+        const todayDay = today.getDay();
+        
+        // If today is Saturday, next Saturday is in 7 days
+        const nextSaturday = todayDay === 6 ? 
+            new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000) : 
+            getNextSaturday(today);
+            
+        // If today is Sunday, next Sunday is in 7 days
+        const nextSunday = todayDay === 0 ? 
+            new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000) : 
+            getNextSunday(today);
         
         const daysUntilSaturday = Math.floor((nextSaturday - today) / (24 * 60 * 60 * 1000));
         const daysUntilSunday = Math.floor((nextSunday - today) / (24 * 60 * 60 * 1000));
@@ -533,6 +559,11 @@ app.post('/api/calculate-goal', (req, res) => {
         console.error('Error calculating savings goal:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
     }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Serve main page
