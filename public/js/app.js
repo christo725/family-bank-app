@@ -97,7 +97,9 @@ function updateCurrentTime() {
 // Check authentication status
 async function checkAuthStatus() {
     try {
-        const response = await fetch('/api/auth/status');
+        const response = await fetch('/api/auth/status', {
+            credentials: 'include'
+        });
         const data = await response.json();
         isAuthenticated = data.authenticated;
         updateAuthUI();
@@ -136,6 +138,7 @@ async function login() {
     try {
         const response = await fetch('/api/auth/login', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -164,7 +167,10 @@ async function login() {
 // Logout function
 async function logout() {
     try {
-        await fetch('/api/auth/logout', { method: 'POST' });
+        await fetch('/api/auth/logout', { 
+            method: 'POST',
+            credentials: 'include'
+        });
         isAuthenticated = false;
         updateAuthUI();
         loadAccountData(); // Refresh data after logout
@@ -176,7 +182,9 @@ async function logout() {
 // Load account data
 async function loadAccountData() {
     try {
-        const response = await fetch('/api/account');
+        const response = await fetch('/api/account', {
+            credentials: 'include'
+        });
         accountData = await response.json();
         
         updateUI();
@@ -428,6 +436,7 @@ async function updateInitialSettings() {
     try {
         const response = await fetch('/api/settings/initial', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -465,6 +474,7 @@ async function updateCurrentSettings() {
     try {
         const response = await fetch('/api/settings/current', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -506,6 +516,7 @@ async function addTransaction() {
     try {
         const response = await fetch('/api/transaction', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -538,7 +549,8 @@ async function deleteTransaction(manualIndex) {
     
     try {
         const response = await fetch(`/api/transaction/${manualIndex}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            credentials: 'include'
         });
         
         if (response.ok) {
@@ -567,6 +579,7 @@ async function calculateSavingsGoal() {
     try {
         const response = await fetch('/api/calculate-goal', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },

@@ -15,6 +15,11 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
 
+// Trust proxy in production (needed for secure cookies)
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+}
+
 // In-memory storage for serverless environments
 let memoryStorage = null;
 
@@ -56,10 +61,15 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static('public'));
 app.use(session({
-    secret: 'bank-app-secret-key',
+    secret: process.env.SESSION_SECRET || 'bank-app-secret-key',
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 } // 24 hours
+    cookie: { 
+        secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+        httpOnly: true,
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
 }));
 
 // ========== UTILITY FUNCTIONS ==========
@@ -595,12 +605,26 @@ app.post('/api/settings/current', async (req, res) => {
             data.settings_change_date = new Date();
         }
         
+        console.log('Data before saving:', {
+            current_allowance: data.current_allowance,
+            current_interest: data.current_interest,
+            settings_change_date: data.settings_change_date
+        });
+        
         const saved = await saveAccountData(data);
         if (saved) {
             console.log('Updated current settings successfully:', { 
                 current_allowance: data.current_allowance, 
                 current_interest: data.current_interest 
             });
+            
+            // Verify the save by reloading
+            const verifyData = await loadAccountData();
+            console.log('Verification after save:', {
+                current_allowance: verifyData.current_allowance,
+                current_interest: verifyData.current_interest
+            });
+            
             res.json({ success: true });
         } else {
             console.error('Failed to save account data');
