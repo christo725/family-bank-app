@@ -27,6 +27,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log('App initialized successfully!');
+        
+        // Test function accessibility
+        if (typeof updateCurrentSettings === 'function') {
+            console.log('updateCurrentSettings function is defined');
+        } else {
+            console.error('updateCurrentSettings function is NOT defined!');
+        }
+        
     } catch (error) {
         console.error('Error initializing app:', error);
         document.body.innerHTML = '<div class="container mt-5"><h1>Loading Error</h1><p>Error: ' + error.message + '</p></div>';
@@ -459,6 +467,7 @@ async function updateInitialSettings() {
 async function updateCurrentSettings() {
     console.log('Update function called, authenticated:', isAuthenticated);
     console.log('Button clicked - starting update process');
+    alert('Function called! Check console for details.');
     
     if (!isAuthenticated) {
         showAlert('You must be logged in to update settings', 'warning');
