@@ -261,31 +261,54 @@ function processNewDeposits(data) {
 }
 
 function recalculateFromTransaction(data, transactionDate) {
-    // Find the earliest date we need to recalculate from
-    const recalcFromDate = new Date(transactionDate);
+    // For simplicity and correctness, we'll recalculate everything from the earliest 
+    // manual transaction date to avoid complex edge cases with partial recalculation
     
-    // Remove auto deposits that occurred on or after the transaction date
+    // Find the earliest manual transaction date
+    let earliestManualDate = null;
+    for (const txn of data.manual_txns) {
+        const txnDate = new Date(txn.Date);
+        if (!earliestManualDate || txnDate < earliestManualDate) {
+            earliestManualDate = txnDate;
+        }
+    }
+    
+    if (!earliestManualDate) {
+        // No manual transactions, nothing to recalculate
+        return;
+    }
+    
+    // Remove all auto deposits that occurred on or after the earliest manual transaction
     const preservedDeposits = data.auto_deposits.filter(deposit => 
-        new Date(deposit.Date) < recalcFromDate
+        new Date(deposit.Date) < earliestManualDate
     );
     
-    // Reset last processed dates if they're after our recalc date
-    const lastSaturday = data.last_processed_saturday ? new Date(data.last_processed_saturday) : null;
-    const lastSunday = data.last_processed_sunday ? new Date(data.last_processed_sunday) : null;
+    // Find the last processed dates before the earliest manual transaction
+    let lastSaturday = null;
+    let lastSunday = null;
     
-    if (lastSaturday && lastSaturday >= recalcFromDate) {
-        data.last_processed_saturday = null;
-    }
-    if (lastSunday && lastSunday >= recalcFromDate) {
-        data.last_processed_sunday = null;
+    for (const deposit of preservedDeposits) {
+        const depositDate = new Date(deposit.Date);
+        const dayOfWeek = depositDate.getDay();
+        
+        if (dayOfWeek === 6 && deposit.Type === "Weekly Allowance") { // Saturday
+            if (!lastSaturday || depositDate > lastSaturday) {
+                lastSaturday = depositDate;
+            }
+        } else if (dayOfWeek === 0 && deposit.Type.includes("Interest")) { // Sunday
+            if (!lastSunday || depositDate > lastSunday) {
+                lastSunday = depositDate;
+            }
+        }
     }
     
-    // Update auto_deposits with preserved deposits
+    // Reset data to state before earliest manual transaction
     data.auto_deposits = preservedDeposits;
+    data.last_processed_saturday = lastSaturday;
+    data.last_processed_sunday = lastSunday;
     
-    // Process new deposits from the recalc date forward
+    // Now use regular processNewDeposits to rebuild everything from that point
     processNewDeposits(data);
-    saveAccountData(data);
 }
 
 function recalculateAllDeposits(data) {
