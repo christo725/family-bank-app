@@ -714,6 +714,10 @@ app.post('/api/transaction', async (req, res) => {
 
 // Delete manual transaction
 app.delete('/api/transaction/:index', async (req, res) => {
+    console.log('Delete transaction request received');
+    console.log('Session authenticated:', !!req.session.authenticated);
+    console.log('Requested index:', req.params.index);
+    
     if (!req.session.authenticated) {
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
@@ -722,18 +726,27 @@ app.delete('/api/transaction/:index', async (req, res) => {
         const data = await loadAccountData();
         const index = parseInt(req.params.index);
         
+        console.log('Manual transactions count:', data.manual_txns.length);
+        console.log('Manual transactions:', data.manual_txns.map((txn, i) => ({ index: i, type: txn.Type, amount: txn.Amount })));
+        
         if (index < 0 || index >= data.manual_txns.length) {
+            console.log('Invalid index - out of bounds');
             return res.status(400).json({ success: false, message: 'Invalid transaction index' });
         }
         
         // Get the transaction date before removing it
-        const transactionDate = data.manual_txns[index].Date;
+        const transactionToDelete = data.manual_txns[index];
+        console.log('Deleting transaction:', { index, type: transactionToDelete.Type, amount: transactionToDelete.Amount });
+        
+        const transactionDate = transactionToDelete.Date;
         
         // Remove the transaction
         data.manual_txns.splice(index, 1);
+        console.log('Transaction removed. Remaining count:', data.manual_txns.length);
         
         // Recalculate deposits from the transaction date forward
         await recalculateFromTransaction(data, transactionDate);
+        console.log('Recalculation completed successfully');
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting transaction:', error);
