@@ -50,7 +50,14 @@ function formatDateForInput(date) {
 
 // Format date for display
 function formatDateForDisplay(dateString) {
-    const date = new Date(dateString);
+    // Handle both ISO and YYYY-MM-DD formats
+    let date;
+    if (dateString.includes('T')) {
+        date = new Date(dateString);
+    } else {
+        const [year, month, day] = dateString.split('-').map(num => parseInt(num));
+        date = new Date(year, month - 1, day);
+    }
     return date.toLocaleDateString('en-US', {
         weekday: 'long',
         year: 'numeric',

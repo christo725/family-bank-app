@@ -81,11 +81,16 @@ function getSundaysBetween(startDate, endDate) {
 }
 
 function formatDate(date) {
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function parseDate(dateString) {
-    return new Date(dateString);
+    // Parse as local date, not UTC
+    const [year, month, day] = dateString.split('-').map(num => parseInt(num));
+    return new Date(year, month - 1, day);
 }
 
 // Authentication
@@ -357,11 +362,13 @@ app.get('/api/account', (req, res) => {
             is_saturday: todayDay === 6,
             is_sunday: todayDay === 0,
             debug_info: {
-                today_date: today.toISOString(),
+                today_date: formatDate(today),
                 today_day: todayDay,
                 day_names: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][todayDay],
-                next_saturday_date: nextSaturday.toISOString(),
-                next_sunday_date: nextSunday.toISOString()
+                next_saturday_date: formatDate(nextSaturday),
+                next_sunday_date: formatDate(nextSunday),
+                server_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                server_time: new Date().toString()
             }
         });
     } catch (error) {
