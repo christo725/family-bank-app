@@ -350,34 +350,39 @@ async function processNewDeposits(data) {
 }
 
 async function recalculateFromTransaction(data, transactionDate) {
-    // For simplicity and correctness, we'll recalculate everything from the earliest 
-    // manual transaction date to avoid complex edge cases with partial recalculation
+    // Manual transactions should only affect interest calculations going forward,
+    // not historical allowances or previous interest payments
     
-    // Find the earliest manual transaction date
-    let earliestManualDate = null;
-    for (const txn of data.manual_txns) {
-        const txnDate = new Date(txn.Date);
-        if (!earliestManualDate || txnDate < earliestManualDate) {
-            earliestManualDate = txnDate;
-        }
-    }
-    
-    if (!earliestManualDate) {
-        // No manual transactions left - just recalculate all auto deposits from scratch
-        await recalculateAllDeposits(data);
+    if (data.manual_txns.length === 0) {
+        // No manual transactions left - just ensure we have all current auto deposits
+        await processNewDeposits(data);
+        await saveAccountData(data);
         return;
     }
     
-    // Remove all auto deposits that occurred on or after the earliest manual transaction
-    const preservedDeposits = data.auto_deposits.filter(deposit => 
-        new Date(deposit.Date) < earliestManualDate
-    );
+    // Find all dates where manual transactions exist
+    const manualTransactionDates = data.manual_txns.map(txn => new Date(txn.Date));
     
-    // Find the last processed dates before the earliest manual transaction
+    // Remove only interest payments that come after any manual transaction
+    // Keep all allowances (they don't depend on balance)
+    const preservedDeposits = data.auto_deposits.filter(deposit => {
+        const depositDate = new Date(deposit.Date);
+        const isInterestPayment = deposit.Type.includes("Interest");
+        
+        if (!isInterestPayment) {
+            // Keep all allowances - they don't depend on balance
+            return true;
+        }
+        
+        // For interest payments, only keep those that come before any manual transaction
+        return !manualTransactionDates.some(manualDate => depositDate >= manualDate);
+    });
+    
+    // Find the last processed dates from preserved deposits
     let lastSaturday = null;
     let lastSunday = null;
     
-    for (const deposit of preservedDeposits) {
+    for (const deposit of data.auto_deposits) {
         const depositDate = new Date(deposit.Date);
         const dayOfWeek = depositDate.getDay();
         
@@ -386,18 +391,20 @@ async function recalculateFromTransaction(data, transactionDate) {
                 lastSaturday = depositDate;
             }
         } else if (dayOfWeek === 0 && deposit.Type.includes("Interest")) { // Sunday
-            if (!lastSunday || depositDate > lastSunday) {
-                lastSunday = depositDate;
+            // Only count preserved interest payments for last processed Sunday
+            if (preservedDeposits.includes(deposit)) {
+                if (!lastSunday || depositDate > lastSunday) {
+                    lastSunday = depositDate;
+                }
             }
         }
     }
     
-    // Reset data to state before earliest manual transaction
+    // Update data with preserved deposits and recalculate from there
     data.auto_deposits = preservedDeposits;
-    data.last_processed_saturday = lastSaturday;
-    data.last_processed_sunday = lastSunday;
+    data.last_processed_sunday = lastSunday; // Reset Sunday processing to recalculate interest
     
-    // Now use regular processNewDeposits to rebuild everything from that point
+    // Process new deposits (this will add missing allowances and recalculate interest)
     await processNewDeposits(data);
     
     // Ensure data is saved after recalculation
