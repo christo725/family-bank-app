@@ -458,6 +458,7 @@ async function updateInitialSettings() {
 // Update current settings
 async function updateCurrentSettings() {
     console.log('Update function called, authenticated:', isAuthenticated);
+    console.log('Button clicked - starting update process');
     
     if (!isAuthenticated) {
         showAlert('You must be logged in to update settings', 'warning');
@@ -469,7 +470,8 @@ async function updateCurrentSettings() {
         current_interest: document.getElementById('currentInterestInput').value
     };
     
-    console.log('Attempting to update current settings:', data);
+    console.log('Form values collected:', data);
+    console.log('About to send fetch request to /api/settings/current');
     
     try {
         const response = await fetch('/api/settings/current', {
