@@ -30,6 +30,11 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
         url: process.env.UPSTASH_REDIS_REST_URL,
         token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
+    console.log('Redis client initialized successfully');
+} else {
+    console.log('Redis environment variables not found, using file storage');
+    console.log('UPSTASH_REDIS_REST_URL present:', !!process.env.UPSTASH_REDIS_REST_URL);
+    console.log('UPSTASH_REDIS_REST_TOKEN present:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
 // Migration helper
@@ -251,8 +256,14 @@ async function saveAccountData(data) {
         
         // Save to Redis if available
         if (redis) {
-            await redis.set('bank_account_data', JSON.stringify(saveData));
-            return true;
+            try {
+                await redis.set('bank_account_data', JSON.stringify(saveData));
+                console.log('Data saved to Redis successfully');
+                return true;
+            } catch (redisError) {
+                console.error('Redis save failed:', redisError);
+                // Fall through to file system backup
+            }
         }
         
         // Fall back to file system for local development
@@ -577,7 +588,13 @@ app.post('/api/settings/initial', async (req, res) => {
 });
 
 app.post('/api/settings/current', async (req, res) => {
+    console.log('Settings update request received');
+    console.log('Session ID:', req.sessionID);
+    console.log('Session authenticated:', !!req.session.authenticated);
+    console.log('Session data:', req.session);
+    
     if (!req.session.authenticated) {
+        console.log('Authentication failed - rejecting request');
         return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
     
@@ -798,8 +815,30 @@ app.post('/api/calculate-goal', async (req, res) => {
 });
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    const healthData = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        storage: {
+            redis_configured: !!redis,
+            redis_url_present: !!process.env.UPSTASH_REDIS_REST_URL,
+            redis_token_present: !!process.env.UPSTASH_REDIS_REST_TOKEN,
+            using_file_storage: !redis
+        }
+    };
+    
+    // Test Redis connection if available
+    if (redis) {
+        try {
+            await redis.ping();
+            healthData.storage.redis_connection = 'ok';
+        } catch (error) {
+            healthData.storage.redis_connection = 'failed';
+            healthData.storage.redis_error = error.message;
+        }
+    }
+    
+    res.status(200).json(healthData);
 });
 
 // Recalculate all deposits (admin endpoint)
