@@ -410,7 +410,12 @@ function updateSettingsForm() {
 
 // Update initial settings
 async function updateInitialSettings() {
-    if (!isAuthenticated) return;
+    console.log('Update initial settings called, authenticated:', isAuthenticated);
+    
+    if (!isAuthenticated) {
+        showAlert('You must be logged in to update settings', 'warning');
+        return;
+    }
     
     const data = {
         account_holder: document.getElementById('accountHolder').value,
@@ -443,12 +448,19 @@ async function updateInitialSettings() {
 
 // Update current settings
 async function updateCurrentSettings() {
-    if (!isAuthenticated) return;
+    console.log('Update function called, authenticated:', isAuthenticated);
+    
+    if (!isAuthenticated) {
+        showAlert('You must be logged in to update settings', 'warning');
+        return;
+    }
     
     const data = {
         current_allowance: document.getElementById('currentAllowanceInput').value,
         current_interest: document.getElementById('currentInterestInput').value
     };
+    
+    console.log('Attempting to update current settings:', data);
     
     try {
         const response = await fetch('/api/settings/current', {
@@ -459,11 +471,15 @@ async function updateCurrentSettings() {
             body: JSON.stringify(data)
         });
         
+        const responseText = await response.text();
+        console.log('Server response:', response.status, responseText);
+        
         if (response.ok) {
             showAlert('Current rates updated successfully!', 'success');
             await loadAccountData(); // Reload data
         } else {
-            showAlert('Error updating current rates', 'danger');
+            console.error('Server error:', response.status, responseText);
+            showAlert(`Error updating current rates: ${responseText}`, 'danger');
         }
     } catch (error) {
         console.error('Error updating current settings:', error);

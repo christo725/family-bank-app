@@ -306,7 +306,12 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/auth/status', (req, res) => {
-    res.json({ authenticated: !!req.session.authenticated });
+    console.log('Auth status check - Session ID:', req.sessionID, 'Authenticated:', !!req.session.authenticated);
+    res.json({ 
+        authenticated: !!req.session.authenticated,
+        sessionId: req.sessionID,
+        debug: process.env.NODE_ENV !== 'production' ? req.session : undefined
+    });
 });
 
 // Account data
