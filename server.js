@@ -262,6 +262,7 @@ function recalculateAllDeposits(data) {
     data.last_processed_saturday = null;
     data.last_processed_sunday = null;
     processNewDeposits(data);
+    saveAccountData(data);
 }
 
 function getCurrentTime() {
@@ -521,7 +522,8 @@ app.post('/api/calculate-goal', (req, res) => {
                 already_reached: true,
                 current_balance: currentBalance,
                 goal_amount: goalAmount,
-                message: `🎉 Great news! You already have ${formatCurrency(currentBalance)}, which exceeds your goal of ${formatCurrency(goalAmount)}!`
+                message: `🎉 Great news! You already have ${formatCurrency(currentBalance)}!`,
+                message2: `That's more than your goal of ${formatCurrency(goalAmount)}!`
             });
         }
         
@@ -568,7 +570,8 @@ app.post('/api/calculate-goal', (req, res) => {
                 allowance_payments: saturdays.length,
                 interest_payments: sundays.length,
                 total_allowance: saturdays.length * data.current_allowance,
-                message: `✅ Good news! Starting with ${formatCurrency(currentBalance)}, you'll reach your goal of ${formatCurrency(goalAmount)} with your current ${formatCurrency(data.current_allowance)} weekly allowance and ${data.current_interest}% interest rate.`
+                message: `✅ Great! Right now you have ${formatCurrency(currentBalance)}.`,
+                message2: `You'll reach your goal of ${formatCurrency(goalAmount)} without adding anything extra!`
             });
         } else {
             const shortfall = goalAmount - futureBalance;
@@ -586,7 +589,8 @@ app.post('/api/calculate-goal', (req, res) => {
                 interest_payments: sundays.length,
                 weekly_extra_needed: weeklyExtra,
                 total_allowance: saturdays.length * data.current_allowance,
-                message: `📊 Starting with ${formatCurrency(currentBalance)}, you'll have ${formatCurrency(futureBalance)} by your target date. To reach your goal of ${formatCurrency(goalAmount)}, you'll need to save an additional ${formatCurrency(weeklyExtra)} each week.`
+                message: `Right now you have ${formatCurrency(currentBalance)}. If you don't add any extra, you'll have ${formatCurrency(futureBalance)} by your target date.`,
+                message2: `To reach your goal of ${formatCurrency(goalAmount)}, you'll need to save an additional ${formatCurrency(weeklyExtra)} each week.`
             });
         }
     } catch (error) {
@@ -598,6 +602,22 @@ app.post('/api/calculate-goal', (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Recalculate all deposits (admin endpoint)
+app.post('/api/recalculate', (req, res) => {
+    if (!req.session.authenticated) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+    }
+    
+    try {
+        const data = loadAccountData();
+        recalculateAllDeposits(data);
+        res.json({ success: true, message: 'All deposits recalculated successfully' });
+    } catch (error) {
+        console.error('Error recalculating deposits:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
 });
 
 // Serve main page
