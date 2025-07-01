@@ -14,6 +14,9 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const DATA_FILE = path.join(__dirname, 'data', 'bank_account_data.json');
 
+// In-memory storage for serverless environments
+let memoryStorage = null;
+
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -255,6 +258,34 @@ function processNewDeposits(data) {
         return true;
     }
     return false;
+}
+
+function recalculateFromTransaction(data, transactionDate) {
+    // Find the earliest date we need to recalculate from
+    const recalcFromDate = new Date(transactionDate);
+    
+    // Remove auto deposits that occurred on or after the transaction date
+    const preservedDeposits = data.auto_deposits.filter(deposit => 
+        new Date(deposit.Date) < recalcFromDate
+    );
+    
+    // Reset last processed dates if they're after our recalc date
+    const lastSaturday = data.last_processed_saturday ? new Date(data.last_processed_saturday) : null;
+    const lastSunday = data.last_processed_sunday ? new Date(data.last_processed_sunday) : null;
+    
+    if (lastSaturday && lastSaturday >= recalcFromDate) {
+        data.last_processed_saturday = null;
+    }
+    if (lastSunday && lastSunday >= recalcFromDate) {
+        data.last_processed_sunday = null;
+    }
+    
+    // Update auto_deposits with preserved deposits
+    data.auto_deposits = preservedDeposits;
+    
+    // Process new deposits from the recalc date forward
+    processNewDeposits(data);
+    saveAccountData(data);
 }
 
 function recalculateAllDeposits(data) {
@@ -509,8 +540,8 @@ app.post('/api/transaction', (req, res) => {
             Amount: transactionAmount
         });
         
-        // Recalculate all deposits after adding manual transaction
-        recalculateAllDeposits(data);
+        // Recalculate deposits from the transaction date forward
+        recalculateFromTransaction(data, transactionDate);
         res.json({ success: true });
     } catch (error) {
         console.error('Error adding transaction:', error);
@@ -532,11 +563,14 @@ app.delete('/api/transaction/:index', (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid transaction index' });
         }
         
+        // Get the transaction date before removing it
+        const transactionDate = data.manual_txns[index].Date;
+        
         // Remove the transaction
         data.manual_txns.splice(index, 1);
         
-        // Recalculate all deposits after removing manual transaction
-        recalculateAllDeposits(data);
+        // Recalculate deposits from the transaction date forward
+        recalculateFromTransaction(data, transactionDate);
         res.json({ success: true });
     } catch (error) {
         console.error('Error deleting transaction:', error);
