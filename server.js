@@ -842,6 +842,23 @@ app.post('/api/calculate-goal', async (req, res) => {
 });
 
 
+// Debug endpoint to check current data
+app.get('/api/debug/current-data', async (req, res) => {
+    try {
+        const data = await loadAccountData();
+        res.json({
+            account_holder: data.account_holder,
+            initial_allowance: data.initial_allowance,
+            initial_interest: data.initial_interest,
+            current_allowance: data.current_allowance,
+            current_interest: data.current_interest,
+            settings_change_date: data.settings_change_date
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Health check endpoint
 app.get('/health', async (req, res) => {
     const healthData = {
